@@ -1,0 +1,135 @@
+---
+title: "Capstone wk2"
+author: "goose000"
+date: "May 3, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(NLP)
+library(cleanNLP)
+library(tidyverse)
+library(tidytext)
+library(R.utils)
+library(scales)
+
+twitterPath <- '~/R/Capstone/Data/en_US/en_US.twitter.txt'
+newsPath <- '~/R/Capstone/Data/en_US/en_US.news.txt'
+blogsPath <- '~/R/Capstone/Data/en_US/en_US.blogs.txt'
+
+twitterCon <- file(twitterPath, 'rt')
+newsCon <- file(newsPath, 'rt', blocking = F)
+blogsCon <- file(blogsPath, 'rt')
+```
+
+## Answering Quiz one
+
+First, let's use the `countlines` function to count the lines in the textfiles.
+```{r}
+newsLines <- countLines(newsPath)
+blogsLines <- countLines(blogsPath)
+(twitterLines <- countLines(twitterPath))
+```
+
+###Read in the Data
+Next, let's read in the data to address the other questions. (We will only read in the first 100 lines to speed up processing, but the full dataset has been used for exploratory analysis independently of this document.)
+
+```{r, echo=F}
+twitterData<- readLines(con = twitterCon, n = 100)
+newsData <- readLines(con = newsCon, n = 100)
+blogsData <- readLines(con = blogsCon, n = 100)
+
+close(twitterCon, newsCon, blogsCon)
+```
+
+###Entry Length
+Calling nchar on each data vector can tell us which dataset has longer entries (using the full dataset gives the correct answer to the quiz question).
+
+```{r}
+max(nchar(newsData))
+max(nchar(blogsData))
+
+```
+
+
+
+```{r include=F}
+sum(twitterData == "A computer once beat me at chess, but it was no match for me at kickboxing")
+```
+## Data Visualization
+Next, we will tokenize the data to create some more thorough visualizations. `unnest_tokens` creates a dataframe with the line number in the first column and each occurance of a given word in the second column. 
+```{r}
+twitterDF <- tibble(line = 1: length(twitterData), text = twitterData) 
+
+(twitterTokenized <- twitterDF%>%
+        unnest_tokens(word, text))
+
+```
+```{r, echo=F}
+newsDF <- tibble(line = 1: length(newsData), text = newsData) 
+
+newsTokenized <- newsDF%>%
+        unnest_tokens(word, text)
+
+
+blogsDF <- tibble(line = 1: length(blogsData), text = blogsData) 
+
+blogsTokenized <- blogsDF%>%
+        unnest_tokens(word, text)
+
+```
+
+Now that the data has been tokenized, we can create a summary for each word. Here we will count the occurance of each word and display the top 10 in frequency from the twitter dataset.
+
+```{r}
+twitterCount <- twitterTokenized %>%
+        count(word, sort = T) 
+
+twitterCount %>%
+        head(10) %>%
+        mutate(word = reorder(word, n)) %>%
+        ggplot(aes(word, n)) +
+        geom_col() +
+        xlab(NULL) +
+        coord_flip()
+        
+```
+
+### Source Comparison
+Finally, we will place the summary from each datasource into one dataframe and plot both blogs and news articles against twitter usage to compare frequencies.
+
+```{r}
+frequency <- bind_rows(mutate(twitterTokenized, source = 'twitter'),
+                       mutate(newsTokenized, source = 'news'),
+                       mutate(blogsTokenized, source = 'blogs')) %>%
+        count(source, word) %>%
+        group_by(source) %>%
+        mutate(proportion = n / sum(n)) %>%
+        select(-n) %>%
+        pivot_wider(names_from = source, values_from = proportion) %>%
+        pivot_longer(-c(word,twitter), names_to = 'source', values_to = 'proportion')
+        
+```
+```{r echo=FALSE, warning=FALSE}
+ggplot(frequency, aes(x = proportion, y = twitter, color = abs(twitter - proportion))) +#
+        geom_abline(color = 'gray40', lty = 2) + 
+        geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
+        geom_text(aes(label = word), check_overlap = T, vjust = 1.5) +
+        scale_x_log10(labels = percent_format()) +
+        scale_y_log10(labels = percent_format()) +
+        scale_color_gradient(limits = c(0, 0.001), low = 'darkslategray4', high = 'gray75') +
+        facet_wrap(~source, ncol = 2) +
+        theme(legend.position = 'none') + 
+        labs(y = 'twitter', x = NULL)
+
+```
+```{r}
+
+```
+
+##Conclusions
+At first look, we see the expected "stop words" commonly used in the english language such as articles and commonly used prepositions. Although we would likely omit these if our goal was to analyze content, with the intent to build a text recommendation system, they clearly should remain in. Comparing twitter against blogs and news was not particularly insightful regarding details, but it's clear that there are different language patterns in the three different sources.
+
+
+
